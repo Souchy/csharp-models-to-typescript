@@ -204,8 +204,8 @@ const createConverter = config => {
         const type = parseType(method.Type);
 
         const params = method.Parameters.map(p => `${p.Identifier}: ${parseType(p.Type)}`).join(", ");
-
-        return `${identifier}(${params}): ${type};`;
+        const code = `//request at ${method.Route}`;
+        return `public ${identifier}(${params}): ${type} {\n\t\t${code}\n\t}`;
     };
 
      const convertIndexType = indexType => {

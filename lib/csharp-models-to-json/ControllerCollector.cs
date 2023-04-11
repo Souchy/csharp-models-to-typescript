@@ -19,6 +19,7 @@ namespace CSharpModelsToJson
     {
         public string Identifier { get; set; }
         public string Type { get; set; }
+        public string Route { get; set; }
         public IEnumerable<Parameter> Parameters { get; set; }
     }
     public class Parameter
@@ -96,19 +97,26 @@ namespace CSharpModelsToJson
                                 .Select(ConvertMethod),
             };
         }
-        private Method ConvertMethod(MethodDeclarationSyntax field) => new Method
-        {
-            Identifier = field.Identifier.ToString(),
-            Type = field.ReturnType.ToString(), 
-            Parameters = field.ParameterList?.Parameters.Select(p =>
+        private Method ConvertMethod(MethodDeclarationSyntax node) {
+            var m = new Method
             {
-                return new Parameter()
+                Identifier = node.Identifier.ToString(),
+                Type = node.ReturnType.ToString(), 
+                Parameters = node.ParameterList?.Parameters.Select(p =>
                 {
-                    Identifier = p.Identifier.ToString(),
-                    Type = p.Type.ToString(),
-                };
-            })
-        };
+                    return new Parameter()
+                    {
+                        Identifier = p.Identifier.ToString(),
+                        Type = p.Type.ToString(),
+                    };
+                }),
+            };
+            string[] tags = new[] { "HttpGet", "HttpPost", "Route" };
+            var attrs = node.AttributeLists.SelectMany(al => al.Attributes.Where(a => tags.Contains(a.Name.ToString())));
+            var arg = attrs.FirstOrDefault()?.ArgumentList.Arguments.FirstOrDefault();
+            if (arg != null) m.Route = arg.Expression.ToString();
+            return m;
+        }
 
         private bool IsIgnored(SyntaxList<AttributeListSyntax> propertyAttributeLists) => 
             propertyAttributeLists.Any(attributeList => 
