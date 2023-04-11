@@ -31,6 +31,9 @@ try {
 const output = config.output || 'types.d.ts';
 
 const converter = createConverter({
+    output: config.output,
+    root: config.root.replace("/**/*.cs", ""),
+    omitBaseClasses: [ ...config.omitBaseClasses ],
     customTypeTranslations: config.customTypeTranslations || {},
     namespace: config.namespace,
     camelCase: config.camelCase || false,
@@ -48,6 +51,10 @@ const dotnetProject = path.join(__dirname, 'lib/csharp-models-to-json');
 const dotnetProcess = spawn('dotnet', ['run', `--project "${dotnetProject}"`, `"${path.resolve(configPath)}"`], { shell: true });
 
 let stdout = '';
+
+dotnetProcess.stdout.on('data', data => {
+    console.log(data.toString());
+});
 
 dotnetProcess.stdout.on('data', data => {
     stdout += data;
@@ -71,13 +78,13 @@ dotnetProcess.stdout.on('end', () => {
     }
 
     const types = converter(json);
+    
+    // fs.writeFile(output, types, err => {
+    //     if (err) {
+    //         return console.error(err);
+    //     }
 
-    fs.writeFile(output, types, err => {
-        if (err) {
-            return console.error(err);
-        }
-
-        timer = process.hrtime(timer);
-        console.log('Done in %d.%d seconds.', timer[0], timer[1]);
-    });
+    //     timer = process.hrtime(timer);
+    //     console.log('Done in %d.%d seconds.', timer[0], timer[1]);
+    // });
 });

@@ -1,3 +1,5 @@
+
+const fs = require('fs');
 const path = require('path');
 const camelcase = require('camelcase');
 
@@ -18,6 +20,7 @@ const defaultTypeTranslations = {
     short: 'number',
     long: 'number',
     decimal: 'number',
+    byte: 'number',
     bool: 'boolean',
     DateTime: 'string',
     DateTimeOffset: 'string',
@@ -32,15 +35,33 @@ const createConverter = config => {
     const convert = json => {
         const content = json.map(file => {
             const filename = path.relative(process.cwd(), file.FileName);
+        
+            let exportPath = config.output + file.FileName; // config.namespace + 
+            while(exportPath.indexOf("\\") != -1) 
+                exportPath = exportPath.replace("\\", "/");
+            exportPath = exportPath.replace(config.root, "").replace(".cs", ".d.ts");
+            // console.log("basename: " + file.FileName + ", " + config.root + ", " + exportPath);
 
             const rows = flatten([
                 ...file.Models.map(model => convertModel(model, filename)),
                 ...file.Enums.map(enum_ => convertEnum(enum_, filename)),
+                ...file.Controllers.map(cont_ => convertController(cont_, filename)),
             ]);
 
-            return rows
+            let text = rows
                 .map(row => config.namespace ? `    ${row}` : row)
                 .join('\n');
+
+            if (true) {
+                ensureDirectoryExistence(exportPath);
+
+                fs.writeFile(exportPath, 
+                    config.namespace ? `declare module ${config.namespace} {\n${text} }` : text
+                    , err => {
+                    if (err) return console.error(err);
+                });
+            } 
+            return "";
         });
 
         const filteredContent = content.filter(x => x.length > 0);
@@ -56,12 +77,22 @@ const createConverter = config => {
         }
     };
 
+    function ensureDirectoryExistence(filePath) {
+        var dirname = path.dirname(filePath);
+        if (fs.existsSync(dirname)) {
+            return true;
+        }
+        ensureDirectoryExistence(dirname);
+        fs.mkdirSync(dirname);
+    }
+    
     const convertModel = (model, filename) => {
         const rows = [];
 
         if (model.BaseClasses) {
             model.IndexSignature = model.BaseClasses.find(type => type.match(dictionaryRegex));
             model.BaseClasses = model.BaseClasses.filter(type => !type.match(dictionaryRegex));
+            model.BaseClasses = model.BaseClasses.filter(type => !config.omitBaseClasses.includes(type));
         }
 
         const members = [...(model.Fields || []), ...(model.Properties || [])];
@@ -70,7 +101,7 @@ const createConverter = config => {
         if (!config.omitFilePathComment) {
             rows.push(`// ${filename}`);
         }
-        rows.push(`export interface ${model.ModelName}${baseClasses} {`);
+        rows.push(`export class ${model.ModelName}${baseClasses} {`);
 
         const propertySemicolon = config.omitSemicolon ? '' : ';';
 
@@ -80,6 +111,38 @@ const createConverter = config => {
 
         members.forEach(member => {
             rows.push(`    ${convertProperty(member)}${propertySemicolon}`);
+        });
+
+        rows.push(`}\n`);
+
+        return rows;
+    };
+    
+    const convertController = (model, filename) => {
+        const rows = [];
+
+        if (model.BaseClasses) {
+            model.IndexSignature = model.BaseClasses.find(type => type.match(dictionaryRegex));
+            model.BaseClasses = model.BaseClasses.filter(type => !type.match(dictionaryRegex));
+            model.BaseClasses = model.BaseClasses.filter(type => !config.omitBaseClasses.includes(type));
+        }
+
+        const members = [...(model.Methods || [])];
+        const baseClasses = model.BaseClasses && model.BaseClasses.length ? ` extends ${model.BaseClasses.join(', ')}` : '';
+
+        if (!config.omitFilePathComment) {
+            rows.push(`// ${filename}`);
+        }
+        rows.push(`export class ${model.ModelName}${baseClasses} {`);
+
+        const propertySemicolon = config.omitSemicolon ? '' : ';';
+
+        if (model.IndexSignature) {
+            rows.push(`    ${convertIndexType(model.IndexSignature)}${propertySemicolon}`);
+        }
+
+        members.forEach(member => {
+            rows.push(`    ${convertMethod(member)}`);
         });
 
         rows.push(`}\n`);
@@ -134,6 +197,15 @@ const createConverter = config => {
         const type = parseType(property.Type);
 
         return `${identifier}: ${type}`;
+    };
+    
+    const convertMethod = method => {
+        const identifier = convertIdentifier(method.Identifier.split(' ')[0]);
+        const type = parseType(method.Type);
+
+        const params = method.Parameters.map(p => `${p.Identifier}: ${parseType(p.Type)}`).join(", ");
+
+        return `${identifier}(${params}): ${type};`;
     };
 
      const convertIndexType = indexType => {
