@@ -239,17 +239,12 @@ const createConverter = config => {
         if (method.HttpMethod == "HttpPost") {
             codeLines = dedent(`
                     //${method.HttpMethod} at ${route}
-                    const requestOptions = {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(${body ? body : '{}'})
-                    };
-                    return fetch(${route}, requestOptions);
+                    return Environment.post(${route}, JSON.stringify(${body ? body : '{}'}));
                 `).split("\n");
         } else {
             codeLines = dedent(`
                     //${method.HttpMethod} at ${route}
-                    return fetch(${route})
+                    return Environment.get(${route})
                 `).split("\n");
         }
         if (config.namespace) {
