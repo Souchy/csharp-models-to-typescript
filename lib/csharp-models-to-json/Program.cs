@@ -15,6 +15,8 @@ namespace CSharpModelsToJson
     class File
     {
         public string FileName { get; set; }
+        public string Namespace { get; set; }
+        public HashSet<string> Imports { get; set; } = new HashSet<string>();
         public IEnumerable<Model> Models { get; set; }
         public IEnumerable<Enum> Enums { get; set; }
         public IEnumerable<Controller> Controllers { get; set; }
@@ -53,6 +55,7 @@ namespace CSharpModelsToJson
                 if(output != null) 
                     files.Add(output);
             }
+            AddImports(files);
 
             string json = JsonConvert.SerializeObject(files);
             System.Console.WriteLine(json);
@@ -100,11 +103,11 @@ namespace CSharpModelsToJson
             var modelCollector = new ModelCollector(included && !excluded);
             var enumCollector = new EnumCollector(included && !excluded);
             var controllerCollector = new ControllerCollector(included && !excluded);
-
-            if (path.Contains("HomeController"))
-            {
-                //Console.WriteLine($"File: {path}, {hasAttribute}, {included}, {excluded}, {controllerCollector.generateController}");
-            }
+            
+            //if (path.Contains("HomeController"))
+            //{
+            //    Console.WriteLine($"File: {path}, {hasControllerAttribute}, {included}, {excluded}, {controllerCollector.generateController}");
+            //}
             //Console.WriteLine($"File: {path}, {hasAttribute}, {included}, {excluded}");
 
             //Console.WriteLine("File accepted: " + path);
@@ -116,7 +119,8 @@ namespace CSharpModelsToJson
             {
                 return new File()
                 {
-                    FileName = System.IO.Path.GetFullPath(path),
+                    FileName = System.IO.Path.GetFullPath(path).Replace("\\", "/"),
+                    Namespace = root.ChildNodes().OfType<NamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString(),
                     Models = modelCollector.Models,
                     Enums = enumCollector.Enums,
                     Controllers = controllerCollector.Controllers
@@ -124,5 +128,62 @@ namespace CSharpModelsToJson
             }
             return null;
         }
+
+        static void AddImports(List<File> files)
+        {
+            foreach(var file in files)
+            {
+                if (file == null) continue;
+                foreach (var m in file.Models)
+                {
+                    if (m == null) continue;
+                    if(m.Fields != null) 
+                        foreach (var field in m.Fields)
+                        {
+
+                            file.Imports.Add(FindFilepathContainingType(files, field.Type));
+                        }
+                    if (m.Properties != null)
+                        foreach (var prop in m.Properties)
+                        {
+
+                            file.Imports.Add(FindFilepathContainingType(files, prop.Type));
+                        }
+                }
+                foreach (var c in file.Controllers)
+                {
+                    if (c.Methods != null)
+                        foreach (var method in c.Methods)
+                        {
+                            file.Imports.Add(FindFilepathContainingType(files, method.Type));
+                            foreach (var par in method.Parameters)
+                            {
+                                file.Imports.Add(FindFilepathContainingType(files, par.Type));
+                            }
+                        }
+                }
+            }
+        }
+
+        static string FindFilepathContainingType(List<File> files, string type)
+        {
+            foreach (var f in files)
+            {
+                foreach(var m in f.Models)
+                {
+                    if (m.ModelName == type) return f.FileName;
+                }
+                foreach(var e in f.Enums)
+                {
+                    if (e.Identifier == type) return f.FileName;
+                }
+                foreach(var c in f.Controllers)
+                {
+                    if (c.ModelName == type) return f.FileName;
+                }
+            }
+            return "";
+        }
+
     }
 }

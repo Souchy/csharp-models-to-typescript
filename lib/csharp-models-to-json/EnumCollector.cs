@@ -35,7 +35,8 @@ namespace CSharpModelsToJson
                     : null;
             }
 
-            this.Enums.Add(new Enum() {
+            this.Enums.Add(new Enum()
+            {
                 Identifier = node.Identifier.ToString(),
                 Values = values
             });

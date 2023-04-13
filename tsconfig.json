@@ -1,0 +1,37 @@
+{
+    "compilerOptions": {
+      "target": "es6",
+      "module": "commonjs",
+    //   "types": [
+    //     "node",
+    //     "jest"
+    //   ],
+      // "rootDir": "src",
+      "outDir": "dist",
+      "sourceMap": true,
+      "resolveJsonModule": true,
+      "lib": ["es6", "dom"],
+      "esModuleInterop": true,
+  
+      "noImplicitAny": false,
+      "declaration": false,
+      "typeRoots": [
+        "./node_modules/@types"
+      ],
+      "removeComments": true,
+      "emitDecoratorMetadata": true,
+      "experimentalDecorators": true,
+      "moduleResolution": "node",
+      "baseUrl": "src",
+      "allowJs": true,
+      "sourceRoot": "src",
+      // "strictPropertyInitialization": false
+    },
+    "include": [
+      "api/**/*.ts",
+      "api.test/**/*.ts"
+    ],
+    "exclude": [
+      "node_modules"
+    ]
+}

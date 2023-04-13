@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const camelcase = require('camelcase');
+const dedent = require('dedent');
+const endent = require('endent');
 
 const flatten = arr => arr.reduce((a, b) => a.concat(b), []);
 
@@ -35,12 +37,9 @@ const createConverter = config => {
     const convert = json => {
         const content = json.map(file => {
             const filename = path.relative(process.cwd(), file.FileName);
-        
-            let exportPath = config.output + file.FileName; // config.namespace + 
-            while(exportPath.indexOf("\\") != -1) 
-                exportPath = exportPath.replace("\\", "/");
-            exportPath = exportPath.replace(config.root, "").replace(".cs", ".d.ts");
-            // console.log("basename: " + file.FileName + ", " + config.root + ", " + exportPath);
+
+            let exportPath = config.output + "/" + file.FileName;
+            exportPath = exportPath.replace(config.root, "").replace(".cs", ".ts");
 
             const rows = flatten([
                 ...file.Models.map(model => convertModel(model, filename)),
@@ -50,17 +49,22 @@ const createConverter = config => {
 
             let text = rows
                 .map(row => config.namespace ? `    ${row}` : row)
+                // .map(row => `    ${row}`)
                 .join('\n');
 
             if (true) {
                 ensureDirectoryExistence(exportPath);
+                let namespace = config.namespace + '.' + file.Namespace;
+                let imports = convertImports(file.FileName, file.Imports);
+                if (imports) imports += '\n\n';
+                // console.log(`imports: [${imports}]`);
 
-                fs.writeFile(exportPath, 
-                    config.namespace ? `declare module ${config.namespace} {\n${text} }` : text
-                    , err => {
-                    if (err) return console.error(err);
-                });
-            } 
+                fs.writeFile(exportPath,
+                    imports + (config.namespace ? `namespace ${namespace} {\n${text}}` : text),
+                    err => {
+                        if (err) return console.error(err);
+                    });
+            }
             return "";
         });
 
@@ -77,6 +81,24 @@ const createConverter = config => {
         }
     };
 
+    function convertImports(filename, imports) {
+        let travelUp = filename.replace(config.root, "");
+        if (travelUp[0] == "/") travelUp = travelUp.substring(1);
+        let count = travelUp.split("/").length - 1;
+        travelUp = Array.from("../".repeat(count)).join("");
+        imports = imports
+            .map(i => {
+                if (!i) return "";
+                let importName = path.basename(i).replace(".cs", "");
+                let importPath = i.replace(config.root, "").replace(".cs", "");
+                if (importPath[0] == "/") importPath = importPath.substring(1);
+                return `import { ${importName} } from './${travelUp}${importPath}';`
+            })
+            .filter(i => i != "");
+        imports.unshift(`import { Environment } from './${travelUp}environment';`);
+        return imports.join("\n");
+    }
+
     function ensureDirectoryExistence(filePath) {
         var dirname = path.dirname(filePath);
         if (fs.existsSync(dirname)) {
@@ -85,7 +107,7 @@ const createConverter = config => {
         ensureDirectoryExistence(dirname);
         fs.mkdirSync(dirname);
     }
-    
+
     const convertModel = (model, filename) => {
         const rows = [];
 
@@ -117,7 +139,7 @@ const createConverter = config => {
 
         return rows;
     };
-    
+
     const convertController = (model, filename) => {
         const rows = [];
 
@@ -198,24 +220,77 @@ const createConverter = config => {
 
         return `${identifier}: ${type}`;
     };
-    
+
     const convertMethod = method => {
         const identifier = convertIdentifier(method.Identifier.split(' ')[0]);
         const type = parseType(method.Type);
 
-        const params = method.Parameters.map(p => `${p.Identifier}: ${parseType(p.Type)}`).join(", ");
-        const code = `//request at ${method.Route}`;
-        return `public ${identifier}(${params}): ${type} {\n\t\t${code}\n\t}`;
+        const params = method.Parameters
+            .map(p => `${p.Identifier}: ${parseType(p.Type)}`)
+            .join(", ");
+
+        let route = convertRoute(method);
+        let body = method.Parameters
+            .filter(p => !route.includes(`{${p.Identifier}}`))
+            .map(p => `${p.Identifier}`)[0];
+
+        let code = '';
+        let codeLines = []
+        if (method.HttpMethod == "HttpPost") {
+            codeLines = dedent(`
+                    //${method.HttpMethod} at ${route}
+                    const requestOptions = {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(${body ? body : '{}'})
+                    };
+                    return fetch(${route}, requestOptions);
+                `).split("\n");
+        } else {
+            codeLines = dedent(`
+                    //${method.HttpMethod} at ${route}
+                    return fetch(${route})
+                `).split("\n");
+        }
+        if (config.namespace) {
+            code = `\t${codeLines.join("\n\t\t")}\n\t`;
+        } else {
+            code = `${codeLines.join("\n\t\t")}\n`;
+        }
+        return `public async ${identifier}(${params}): ${type} {\n\t\t${code}\t}`;
     };
 
-     const convertIndexType = indexType => {
-       const dictionary = indexType.match(dictionaryRegex);
-       const simpleDictionary = indexType.match(simpleDictionaryRegex);
+    function convertRoute(method) {
+        let route = method.Route;
+        if (route != null) {
+            route = route.replace('\"', '').replace('\"', '');
+            // replace tags that have a default value with just the tag (ex: {duration=500} => {duration})
+            let start = -1;
+            let end = 0;
+            while ((start = route.indexOf('{', end + 1)) != -1) {
+                end = route.indexOf('}', start);
+                let sub = route.substring(start + 1, end);
+                let sub2 = sub.split('=')[0];
+                route = route.replace(sub, sub2);
+            }
+            // add $ to tags to evaluate them
+            for (let p of method.Parameters) {
+                route = route.replace(`{${p.Identifier}}`, `\${${p.Identifier}}`);
+            }
+        } else {
+            route = method.Identifier;
+        }
+        return `Environment.url + \`${route}\``;
+    }
 
-       propType = simpleDictionary ? dictionary[2] : parseType(dictionary[2]);
+    const convertIndexType = indexType => {
+        const dictionary = indexType.match(dictionaryRegex);
+        const simpleDictionary = indexType.match(simpleDictionaryRegex);
 
-       return `[key: ${convertType(dictionary[1])}]: ${convertType(propType)}`;
-     };
+        propType = simpleDictionary ? dictionary[2] : parseType(dictionary[2]);
+
+        return `[key: ${convertType(dictionary[1])}]: ${convertType(propType)}`;
+    };
 
     const convertRecord = indexType => {
         const dictionary = indexType.match(dictionaryRegex);

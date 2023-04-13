@@ -20,6 +20,7 @@ namespace CSharpModelsToJson
         public string Identifier { get; set; }
         public string Type { get; set; }
         public string Route { get; set; }
+        public string HttpMethod { get; set; }
         public IEnumerable<Parameter> Parameters { get; set; }
     }
     public class Parameter
@@ -112,9 +113,13 @@ namespace CSharpModelsToJson
                 }),
             };
             string[] tags = new[] { "HttpGet", "HttpPost", "Route" };
-            var attrs = node.AttributeLists.SelectMany(al => al.Attributes.Where(a => tags.Contains(a.Name.ToString())));
-            var arg = attrs.FirstOrDefault()?.ArgumentList.Arguments.FirstOrDefault();
+            var attr = node.AttributeLists.SelectMany(al => al.Attributes.Where(a => tags.Contains(a.Name.ToString()))).FirstOrDefault();
+            var arg = attr?.ArgumentList.Arguments.FirstOrDefault();
             if (arg != null) m.Route = arg.Expression.ToString();
+            if(attr != null)
+            {
+                m.HttpMethod = attr.Name.ToString();
+            }
             return m;
         }
 

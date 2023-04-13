@@ -15,6 +15,13 @@
     "csharp-models-to-typescript": "./index.js"
   },
   "dependencies": {
-    "camelcase": "^6.0.0"
+    "camelcase": "^6.0.0",
+    "dedent": "^0.7.0",
+    "dedent-js": "^1.0.1",
+    "endent": "^2.1.0",
+    "node-fetch": "^2.6.9"
+  },
+  "devDependencies": {
+    "@types/node": "^18.15.11"
   }
 }
